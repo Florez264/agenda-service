@@ -51,6 +51,13 @@ public class CitaJpaEntity {
   @Column(name = "fecha_cancelacion")
   private Instant fechaCancelacion;
 
+  @Column(name = "orden_version", nullable = false)
+  private long ordenVersion;
+
+  public void registrarVersionOrden(long value) {
+    ordenVersion = value;
+  }
+
   @Version private Long version;
 
   public static CitaJpaEntity desde(Cita c, FranjaJpaEntity franja) {

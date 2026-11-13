@@ -12,7 +12,39 @@ import org.springframework.web.client.*;
 public class OrdenesHttpAdapter implements OrdenesPort {
   private final RestClient client;
 
-  public record Resumen(UUID id, String estado, String telefono) {}
+  public record Resumen(UUID id, String estado, String telefono, long version) {}
+
+  public ResumenEstado consultarResumen(UUID id) {
+    var r = consultar(id);
+    return new ResumenEstado(r.estado(), r.version());
+  }
+
+  public java.util.List<Cierre> cierresPendientes() {
+    try {
+      var r =
+          client
+              .get()
+              .uri("/internal/ordenes/cierres-pendientes")
+              .retrieve()
+              .body(new ParameterizedTypeReference<ApiResponse<java.util.List<Cierre>>>() {});
+      if (r == null || r.data() == null) throw new ServicioNoDisponibleException();
+      return r.data();
+    } catch (RestClientException e) {
+      throw new ServicioNoDisponibleException();
+    }
+  }
+
+  public void confirmarCierre(UUID id) {
+    try {
+      client
+          .patch()
+          .uri("/internal/ordenes/cierres/{id}/confirmar", id)
+          .retrieve()
+          .toBodilessEntity();
+    } catch (RestClientException e) {
+      throw new ServicioNoDisponibleException();
+    }
+  }
 
   public String consultarEstado(UUID id) {
     return consultar(id).estado();

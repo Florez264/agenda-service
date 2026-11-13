@@ -28,12 +28,15 @@ public final class AgendaUseCase {
   }
 
   public CitaDetalle agendar(UUID ordenId, UUID franjaId, TipoCita tipo, String actor) {
-    var estado = ordenes.consultarEstado(ordenId);
+    var resumen = ordenes.consultarResumen(ordenId);
+    var estado = resumen.estado();
     if ("CERRADA".equals(estado))
       throw new ReglaNegocioException("No se pueden agendar citas para una orden cerrada");
     if (tipo == TipoCita.ENTREGA && !"REPARADA".equals(estado))
       throw new ReglaNegocioException("Una cita de entrega requiere una orden reparada");
-    return agenda.reservar(Cita.reservar(ordenId, franjaId, tipo, actor, clock.instant()));
+    agenda.prepararOrden(ordenId);
+    return agenda.reservar(
+        Cita.reservar(ordenId, franjaId, tipo, actor, clock.instant()), resumen.version());
   }
 
   public CitaDetalle cancelar(UUID id, String motivo, String actor) {

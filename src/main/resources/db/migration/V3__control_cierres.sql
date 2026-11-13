@@ -1,0 +1,5 @@
+CREATE TABLE control_orden (
+ orden_id CHAR(36) PRIMARY KEY,
+ ultimo_cierre BIGINT NOT NULL DEFAULT -1
+);
+ALTER TABLE cita ADD COLUMN orden_version BIGINT NOT NULL DEFAULT 0;

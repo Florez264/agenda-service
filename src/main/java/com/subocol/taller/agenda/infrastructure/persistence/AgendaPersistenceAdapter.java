@@ -18,6 +18,55 @@ import org.springframework.transaction.annotation.*;
 public class AgendaPersistenceAdapter implements AgendaPort {
   private final EntityManager em;
   private final Clock clock;
+  private final ControlOrdenAdapter controles;
+
+  @Transactional(propagation = Propagation.NOT_SUPPORTED)
+  public void prepararOrden(UUID id) {
+    try {
+      controles.asegurar(id);
+    } catch (org.springframework.dao.DataIntegrityViolationException concurrente) {
+      // Another transaction created the same order guard. Read the committed row below.
+    }
+  }
+
+  private ControlOrdenJpaEntity controlar(UUID id) {
+    var control = em.find(ControlOrdenJpaEntity.class, id, LockModeType.PESSIMISTIC_WRITE);
+    if (control == null) throw new ReglaNegocioException("Reintenta la operación de agenda");
+    return control;
+  }
+
+  @Transactional(isolation = Isolation.READ_COMMITTED)
+  public void cancelarPorCierre(UUID ordenId, long version) {
+    var control = controlar(ordenId);
+    // Order guard -> slot locks in stable order: same ordering as booking.
+    var ids =
+        em.createQuery(
+                "select distinct c.franja.id from CitaJpaEntity c where c.ordenId=:orden and"
+                    + " c.estado=:estado and c.ordenVersion<:version order by c.franja.id",
+                UUID.class)
+            .setParameter("orden", ordenId)
+            .setParameter("estado", EstadoCita.RESERVADA)
+            .setParameter("version", version)
+            .getResultList();
+    for (var id : ids) bloquear(id);
+    var citas =
+        em.createQuery(
+                "select c from CitaJpaEntity c where c.ordenId=:orden and c.estado=:estado and"
+                    + " c.ordenVersion<:version",
+                CitaJpaEntity.class)
+            .setParameter("orden", ordenId)
+            .setParameter("estado", EstadoCita.RESERVADA)
+            .setParameter("version", version)
+            .getResultList();
+    for (var c : citas)
+      c.aplicarCancelacion(
+          c.aDominio()
+              .cancelar(
+                  "Cancelación automática por cierre de orden", "sistema-cierre", clock.instant()));
+    control.registrar(version);
+    em.flush();
+    // Deliberately no notification event: this is not a manual cancellation.
+  }
 
   @Transactional(isolation = Isolation.READ_COMMITTED)
   public Franja crearFranja(Franja f) {
@@ -38,7 +87,10 @@ public class AgendaPersistenceAdapter implements AgendaPort {
   }
 
   @Transactional(isolation = Isolation.READ_COMMITTED)
-  public CitaDetalle reservar(Cita cita) {
+  public CitaDetalle reservar(Cita cita, long ordenVersion) {
+    var control = controlar(cita.getOrdenId());
+    if (ordenVersion <= control.getUltimoCierre())
+      throw new ReglaNegocioException("La orden fue cerrada; actualiza la orden antes de agendar");
     var franja = bloquear(cita.getFranjaId());
     long ocupados =
         em.createQuery(
@@ -49,6 +101,7 @@ public class AgendaPersistenceAdapter implements AgendaPort {
             .getSingleResult();
     franja.aDominio().validarReserva(ocupados, clock.instant());
     var e = CitaJpaEntity.desde(cita, franja);
+    e.registrarVersionOrden(ordenVersion);
     em.persist(e);
     em.flush();
     var detalle = detalle(e);

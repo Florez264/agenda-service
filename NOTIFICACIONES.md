@@ -6,7 +6,7 @@ Al agendar y al cancelar MANUALMENTE una cita, Agenda guarda un registro PENDIEN
 
 El modo LOG cumple la simulación del enunciado y registra WHATSAPP_SIMULADO con acción, cita, orden, tipo, fecha y asesor. No consulta el teléfono ni llama a Meta. El modo WHATSAPP usa el endpoint oficial /{version}/{phoneId}/messages, con token Bearer y plantillas.
 
-La cancelación automática al cerrar una orden sigue pendiente. Cuando se implemente, deberá omitir el aviso; no debe reutilizar sin cambios la operación de cancelación manual que encola CANCELADA_MANUAL.
+La cancelación automática al cerrar está implementada mediante sincronización de cierres y omite el aviso: no reutiliza la operación manual ni encola CANCELADA_MANUAL. Conserva los avisos anteriores de agendamiento; los mensajes ya aceptados no se retractan.
 
 ## Archivos de configuración
 

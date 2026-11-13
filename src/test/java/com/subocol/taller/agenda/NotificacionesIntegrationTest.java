@@ -29,6 +29,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 @AutoConfigureMockMvc
 class NotificacionesIntegrationTest {
   @Autowired AgendaUseCase agenda;
+
+  @Autowired
+  com.subocol.taller.agenda.infrastructure.persistence.AgendaPersistenceAdapter persistencia;
+
   @Autowired DespacharNotificacionesUseCase despachar;
   @Autowired BuzonNotificacionesPort buzon;
   @Autowired JdbcTemplate jdbc;
@@ -43,6 +47,9 @@ class NotificacionesIntegrationTest {
   void limpiar() {
     when(clock.instant()).thenReturn(ahora);
     when(ordenes.consultarEstado(any())).thenReturn("REGISTRADA");
+    when(ordenes.consultarResumen(any()))
+        .thenAnswer(
+            inv -> new OrdenesPort.ResumenEstado(ordenes.consultarEstado(inv.getArgument(0)), 0));
     jdbc.update("delete from notificacion_cita");
     jdbc.update("delete from cita");
     jdbc.update("delete from franja");
@@ -224,5 +231,51 @@ class NotificacionesIntegrationTest {
             patch("/api/notificaciones/" + agendada.id() + "/reintentar")
                 .with(user("asesor").roles("ASESOR")))
         .andExpect(status().isConflict());
+  }
+
+  @Test
+  void cierreCancelaLiberaCupoNoEncolaAvisoYRepetirNoCancelaReservasTrasReapertura() {
+    var c = crear();
+    var original = count("notificacion_cita");
+    persistencia.cancelarPorCierre(c.ordenId(), 5);
+    persistencia.cancelarPorCierre(c.ordenId(), 5);
+    assertThat(agenda.consultar(c.id()).estado()).isEqualTo(EstadoCita.CANCELADA);
+    assertThat(agenda.consultar(c.id()).canceladaPor()).isEqualTo("sistema-cierre");
+    assertThat(count("notificacion_cita")).isEqualTo(original);
+    assertThat(
+            agenda
+                .franjas(null, ahora, ahora.plusSeconds(7200), new Paginacion(0, 10))
+                .content()
+                .getFirst()
+                .disponibles())
+        .isEqualTo(1);
+    assertThatThrownBy(() -> agenda.agendar(c.ordenId(), c.franjaId(), TipoCita.INGRESO, "asesor"))
+        .isInstanceOf(com.subocol.taller.agenda.domain.exception.ReglaNegocioException.class);
+    doReturn(new OrdenesPort.ResumenEstado("REPARADA", 6))
+        .when(ordenes)
+        .consultarResumen(c.ordenId());
+    var nueva = agenda.agendar(c.ordenId(), c.franjaId(), TipoCita.ENTREGA, "asesor");
+    persistencia.cancelarPorCierre(c.ordenId(), 5);
+    assertThat(agenda.consultar(nueva.id()).estado()).isEqualTo(EstadoCita.RESERVADA);
+    verifyNoInteractions(proveedor);
+  }
+
+  @Test
+  void cierreReintentaSiSePierdeConfirmacionYNoDuplicaCancelaciones() {
+    var c = crear();
+    var evento = new OrdenesPort.Cierre(UUID.randomUUID(), c.ordenId(), 5);
+    when(ordenes.cierresPendientes()).thenReturn(List.of(evento));
+    doThrow(new com.subocol.taller.agenda.domain.exception.ServicioNoDisponibleException())
+        .doNothing()
+        .when(ordenes)
+        .confirmarCierre(evento.id());
+    var worker =
+        new com.subocol.taller.agenda.infrastructure.integration.CierresOrdenWorker(
+            ordenes, persistencia);
+    worker.procesar();
+    worker.procesar();
+    verify(ordenes, times(2)).confirmarCierre(evento.id());
+    assertThat(agenda.consultar(c.id()).estado()).isEqualTo(EstadoCita.CANCELADA);
+    assertThat(count("notificacion_cita")).isEqualTo(1);
   }
 }

@@ -27,7 +27,9 @@ class OrdenesHttpAdapterTest {
         .andExpect(header("Authorization", "Basic YWdlbmRhLWludGVybmFsOnNlY3JldG8="))
         .andRespond(
             withSuccess(
-                "{\"status\":200,\"data\":{\"id\":\"" + id + "\",\"estado\":\"REPARADA\"}}",
+                "{\"status\":200,\"data\":{\"id\":\""
+                    + id
+                    + "\",\"estado\":\"REPARADA\",\"version\":3}}",
                 MediaType.APPLICATION_JSON));
     assertThat(new OrdenesHttpAdapter(builder.build()).consultarEstado(id)).isEqualTo("REPARADA");
     server.verify();
@@ -78,7 +80,7 @@ class OrdenesHttpAdapterTest {
         .andRespond(
             withSuccess(
                 """
-                {"status":200,"data":{"id":"%s","estado":"REGISTRADA","telefono":"+573001234567"}}
+                {"status":200,"data":{"id":"%s","estado":"REGISTRADA","telefono":"+573001234567","version":0}}
                 """
                     .formatted(id),
                 MediaType.APPLICATION_JSON));

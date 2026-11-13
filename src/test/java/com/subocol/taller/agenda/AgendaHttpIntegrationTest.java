@@ -26,10 +26,11 @@ import org.springframework.test.web.servlet.MockMvc;
 class AgendaHttpIntegrationTest {
   @Test
   void corsPermitePreflightAngularSinAutenticacion() throws Exception {
-    mvc.perform(options("/api/prueba")
-        .header("Origin", "http://localhost:4200")
-        .header("Access-Control-Request-Method", "PATCH")
-        .header("Access-Control-Request-Headers", "authorization,content-type"))
+    mvc.perform(
+            options("/api/prueba")
+                .header("Origin", "http://localhost:4200")
+                .header("Access-Control-Request-Method", "PATCH")
+                .header("Access-Control-Request-Headers", "authorization,content-type"))
         .andExpect(status().isOk())
         .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:4200"))
         .andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
@@ -37,14 +38,16 @@ class AgendaHttpIntegrationTest {
 
   @Test
   void corsRechazaOrigenExternoYRutasInternas() throws Exception {
-    mvc.perform(options("/api/prueba")
-        .header("Origin", "https://externo.example")
-        .header("Access-Control-Request-Method", "GET"))
+    mvc.perform(
+            options("/api/prueba")
+                .header("Origin", "https://externo.example")
+                .header("Access-Control-Request-Method", "GET"))
         .andExpect(status().isForbidden())
         .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
-    mvc.perform(options("/internal/ordenes/1")
-        .header("Origin", "http://localhost:4200")
-        .header("Access-Control-Request-Method", "GET"))
+    mvc.perform(
+            options("/internal/ordenes/1")
+                .header("Origin", "http://localhost:4200")
+                .header("Access-Control-Request-Method", "GET"))
         .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
   }
 
@@ -64,6 +67,9 @@ class AgendaHttpIntegrationTest {
   void preparar() {
     when(clock.instant()).thenReturn(Instant.parse("2030-01-01T10:00:00Z"));
     when(ordenes.consultarEstado(any())).thenReturn("REGISTRADA");
+    when(ordenes.consultarResumen(any()))
+        .thenAnswer(
+            inv -> new OrdenesPort.ResumenEstado(ordenes.consultarEstado(inv.getArgument(0)), 0));
     jdbc.update("delete from notificacion_cita");
     jdbc.update("delete from cita");
     jdbc.update("delete from franja");

@@ -11,7 +11,9 @@ public interface AgendaPort {
   Pagina<FranjaDisponible> listarFranjas(
       String asesor, Instant desde, Instant hasta, Paginacion pagina);
 
-  CitaDetalle reservar(Cita cita);
+  void prepararOrden(UUID ordenId);
+
+  CitaDetalle reservar(Cita cita, long ordenVersion);
 
   CitaDetalle cancelar(UUID id, String motivo, String actor);
 
